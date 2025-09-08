@@ -1,0 +1,21 @@
+{
+   "manifest_version": 3,
+    "name": "CheX",
+    "version": "1.0",
+    "description": "A fact-checking tool using Exa and Playwright",
+    "permissions": [
+        "storage",
+        "activeTab",
+        "scripting"
+    ],
+    "content_scripts": [
+        {
+            "matches": ["https://twitter.com/*", "https://x.com/*"],
+            "js": ["UI.js"]
+        },
+        {
+            "matches": ["https://www.reddit.com/*"],
+            "js": ["Reddit.js"]
+        }
+    ]
+}
