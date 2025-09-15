@@ -5,3 +5,5 @@ exa-py
 typing
 fastapi
 uvicorn
+google-auth
+google-api-python-client

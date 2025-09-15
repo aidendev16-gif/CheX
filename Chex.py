@@ -1,29 +1,13 @@
-# %%
-from dotenv import load_dotenv
-import os
-load_dotenv()
+import re, json
 
-groq_api_key = os.getenv("GROQ_API_KEY")
-exa_api_key = os.getenv("EXA_API_KEY")
+from pipeline import classify_claim
+
 
 # %%
-from langchain_groq import ChatGroq
-
-# Replace with your actual Groq API key
-groq_api_key = groq_api_key
-
-'''llm = ChatGroq(
-model="llama-3.3-70b-versatile",
-api_key=groq_api_key,
-temperature=0.7
-)'''
-
-# %%
-from exa_py import Exa
-from pydantic import BaseModel, Field
-from typing import List
+from pydantic import BaseModel
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
@@ -35,28 +19,8 @@ allow_methods=["*"],
 allow_headers=["*"],
 )
 
-# Define schema for structured output
-class FactCheck(BaseModel):
-    verdict: str = Field(..., description="Estimated truth verdict (e.g. 'True', 'False', 'Uncertain')")
-    response: str = Field(..., description="Concise summary of the fact check based on evidence")
-    sources: List[str] = Field(..., description="List of source URLs or references used")
 class FactCheckRequest(BaseModel):
     claim: str
-
-
-# Init Groq
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=groq_api_key,
-    temperature=0
-)
-
-
-
-exa = Exa(api_key=exa_api_key)
-Exa_answer = ""
-
-# =================================================
 
 @app.get("/")
 def home():
@@ -71,49 +35,38 @@ from fastapi.responses import Response
 def healthcheck():
     return Response(status_code=200)
 
-
-
 @app.post("/factcheck/stream")
 def factcheck_stream(req: FactCheckRequest):
-    def generate():
-        global CheckCount
+    claim_text = (req.claim or "").strip()
+    if not claim_text:
+        return JSONResponse(content={
+            "verdict": "Uncertain",
+            "confidence": 0,
+            "response": "⚠️ No text to be fact checked",
+            "sources": []
+        })
 
-        claim_text = (req.claim or "").strip()
-        if not claim_text:
-            yield "⚠️ No text to be fact checked\n"
-            return
+    json_result, _ = classify_claim(claim_text)
+    print("Fact-check completed.", json_result)
 
-        yield "⏳ Starting fact-check...\n"
-        exa_answer = ""
-        print("Fact Checking " + claim_text)
-        CheckCount += 1
-
+    # If json_result is a string, clean and parse it
+    if isinstance(json_result, str):
+        # Remove code fences
+        cleaned = re.sub(r"^```(?:json)?", "", json_result.strip())
+        cleaned = re.sub(r"```$", "", cleaned)
+        # Extract first JSON object
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if match:
+            cleaned = match.group(0)
         try:
-            # ✅ Stream chunks from Exa
-            for chunk in exa.stream_answer("is it true that " + claim_text):
-                if chunk.content:
-                    exa_answer += chunk.content
-                    yield chunk.content + "\n"
-
-        except requests.exceptions.ChunkedEncodingError:
-            yield "\n[Stream ended unexpectedly]\n"
-            return  # don’t continue to LLM if stream broke
+            json_result = json.loads(cleaned)
         except Exception as e:
-            yield f"\n[Error while streaming: {str(e)}]\n"
-            return
-
-        # ✅ After Exa finishes, call the LLM
-        try:
-            structured_llm = llm.with_structured_output(FactCheck)
-            fact_check = structured_llm.invoke(
-                f"Question: {claim_text}\nEvidence:\n{exa_answer}"
-            )
-            yield f"\n✅ Final Verdict:\n{fact_check}\n"
-        except Exception as e:
-            yield f"\n[Error while generating verdict: {str(e)}]\n"
-
-        print("done fact check")
-        print(CheckCount)
-
-    return StreamingResponse(generate(), media_type="text/plain")
-    
+            print("JSON parse failed:", e)
+            json_result = {
+                "verdict": "Uncertain",
+                "confidence": 0,
+                "response": "⚠️ Failed to parse model output as JSON.",
+                "sources": []
+            }
+    print(f"FACTCHECK RESULT TYPE: {type(json_result)}")
+    return JSONResponse(content=json_result)

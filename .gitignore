@@ -1,3 +1,10 @@
 CheX doc.txt
 .env
 CheX.ipynb
+CheX (old).py
+__pycache__/
+.vscode/
+tmp/
+venv/
+WebExtension/
+Gsheets_account.json
