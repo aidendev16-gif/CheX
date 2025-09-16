@@ -74,6 +74,10 @@ def fact_check_search_endpoint(claim, sys_prompt, Exa_result_limit,Exa_num_resul
         #print(json.dumps(result, indent=2))
         return json.dumps(result, indent=2), search_results
     
+
+
+
+    
 # ============================Pipeline function==========================
 def classify_claim(claim):
     start_time = time.time()  # Start timer
@@ -96,16 +100,21 @@ def classify_claim(claim):
     # Parse the result as JSON
     try:
         data = json.loads(result)
-        category = data.get("category", "").lower()
+        post_category = data.get("category", "").lower()
         claim_out = data.get("claim", "")
-        print(f"Category: {category}\nClaim: {claim_out}")
-        if category == 'entertainment':
+        print(f"Category: {post_category}\nClaim: {claim_out}")
+        if post_category == 'entertainment':
             print('No action needed for entertainment posts.')
             elapsed = time.time() - start_time
-            save_to_google_sheets([[claim, "", "", "", "", round(elapsed, 3)]])
-            return 'No action needed for entertainment posts.'  
-        
-        elif category == 'science':
+            save_to_google_sheets([[claim, "", "", "", round(elapsed, 3),"entertainment"]])
+            return ({
+                "verdict": "Uncertain",
+                "confidence": 100,
+                "response": "⚠️ Claim classified as 'entertainment'; no fact-checking performed.",
+                "sources": []
+                }, None)
+
+        elif post_category == 'science':
             #====================================SCIENCE====================================
             sys_prompt = (
                 "You are a fact checker checking science. Use only the provided context. always mention if sources are not reputable. When there are no related sources, simply state that the search result came up empty."
@@ -131,7 +140,7 @@ def classify_claim(claim):
             #====================================SCIENCE====================================
 
 
-        elif category == 'politics':
+        elif post_category == 'politics':
             #====================================POLITICS====================================
             sys_prompt = (
                 "You are a fact checker fact checking politics. Use only the provided context."
@@ -147,7 +156,7 @@ def classify_claim(claim):
             query = f"{claim_out}"
             category = "news"  # Override category for politics claims
             #====================================POLITICS====================================
-        elif category == 'news':
+        elif post_category == 'news':
             #====================================NEWS====================================
             sys_prompt = (
                 "You are a fact checker fact checking news. Use only the provided context. always mention if sources are not reputable. When there are no related sources, simply state that the search result came up empty."
@@ -188,7 +197,7 @@ def classify_claim(claim):
         
         elapsed = time.time() - start_time  # End timer
         # Save to Google Sheets (Raw post,Exa_searched claim,LLM response,Verdict,ElapsedTime)
-        save_to_google_sheets([[claim, query, json_result, json.loads(json_result).get("verdict", ""), round(elapsed, 3)]])
+        save_to_google_sheets([[claim, query, json_result, json.loads(json_result).get("verdict", ""), round(elapsed, 3),post_category]])
 
         print(f"Query took {elapsed:.3f} seconds")
         return json_result, Exa_search_results
@@ -196,6 +205,6 @@ def classify_claim(claim):
     except Exception as e:
         print('Failed to parse LLM output as JSON:', e)
         elapsed = time.time() - start_time
-        save_to_google_sheets([[claim, "", "", "", "", round(elapsed, 3)]])
+        save_to_google_sheets([[claim, "", "", "", round(elapsed, 3),"parsing error"]])
         return None, None
 
