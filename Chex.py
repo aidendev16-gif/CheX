@@ -46,7 +46,7 @@ def factcheck_stream(req: FactCheckRequest):
             "sources": []
         })
 
-    json_result, _ = classify_claim(claim_text)
+    json_result = classify_claim(claim_text)
     print("Fact-check completed.", json_result)
 
     # If json_result is a string, clean and parse it
