@@ -1,7 +1,7 @@
 import re, json
 
 from pipeline import classify_claim
-
+from Gsheets import save_to_google_sheets  # Add this import
 
 # %%
 from pydantic import BaseModel
@@ -21,6 +21,11 @@ allow_headers=["*"],
 
 class FactCheckRequest(BaseModel):
     claim: str
+
+class ReportRequest(BaseModel):
+    claim: str
+    username: str = "Unknown User"
+    reason: str = "User reported as problematic"
 
 @app.get("/")
 def home():
@@ -68,5 +73,32 @@ def factcheck_stream(req: FactCheckRequest):
                 "response": "⚠️ Failed to parse model output as JSON.",
                 "sources": []
             }
-    print(f"FACTCHECK RESULT TYPE: {type(json_result)}")
     return JSONResponse(content=json_result)
+
+@app.post("/report")
+def report_post(req: ReportRequest):
+    try:
+        claim_text = (req.claim or "").strip()
+        username = req.username or "Unknown User"
+        reason = req.reason or "User reported as problematic"
+        
+        if not claim_text:
+            return JSONResponse(content={"success": False, "message": "No content to report"})
+
+        # Save to Google Sheets with "PROBLEM" status
+        save_to_google_sheets([[claim_text, username, "PROBLEM", reason]])
+        
+        print(f"Reported problematic post by {username}: {claim_text[:100]}...")
+        
+        return JSONResponse(content={
+            "success": True, 
+            "message": "Post reported successfully. Thank you for helping improve content quality."
+        })
+        
+    except Exception as e:
+        print(f"Error saving report: {e}")
+        return JSONResponse(content={
+            "success": False, 
+            "message": "Failed to submit report. Please try again."
+        })
+

@@ -50,8 +50,6 @@ def classify_claim(claim):
         contents=("Is it true that: " + claim),
         config=config,
     )
-
-    print(response.text)
         
     elapsed = time.time() - start_time  # End timer
     # Save to Google Sheets (Raw post,Exa_searched claim,LLM response,Verdict,ElapsedTime)
