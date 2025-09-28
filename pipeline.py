@@ -23,14 +23,17 @@ def classify_claim(claim):
     client_gemini = genai.Client(api_key=google_genai_api_key) 
 
     sys_prompt = (
-            "You are a fact checker. You are to determine if the given claim is true, false, or uncertain based on the provided context. "
+            "You are a fact checker fact checking posts on X. You are to determine the claims in the post and determine if it is true, false, or uncertain. ALWAYS search the web for relevant information to support your verdict. "
             "Return a structured JSON object with the fields: "
             "verdict (string: 'True', 'False', or 'Uncertain'), "
             "confidence (integer 0–99, never 100), "
-            "response (string, explaining the reasoning behind the verdict briefly)," 
+            "explanation (string, explaining the reasoning behind the verdict briefly)," 
             "sources (list of URLs)."
+            "For 'sources', always return the grounded citations provided by the search tool "
+            "(they will look like 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/...'). "
+            "Never fabricate or shorten these links, and never return raw guessed URLs."
             "Return ONLY the JSON."
-            "here is an example of a valid output: {\"verdict\": \"True\", \"confidence\": 85, \"response\": \"The claim is supported by multiple reputable sources that confirm the event occurred as described.\", \"sources\": [\"https://www.example1.com/article\", \"https://www.example2.com/report\"]}"
+            "here is an example of a valid output: ```JSON {\"verdict\": \"True\", \"confidence\": 85, \"explanation\": \"The claim is supported by multiple reputable sources that confirm the event occurred as described.\", \"sources\": [\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/...\", \"https://vertexaisearch.cloud.google.com/grounding-api-redirect/...\"]}```"
             "again, you MUST return ONLY the JSON."
         )
 
@@ -58,11 +61,3 @@ def classify_claim(claim):
     print(f"Query took {elapsed:.3f} seconds")
     return response.text
 
-'''
-    except Exception as e:
-        print('Failed to parse LLM output as JSON:', e)
-        elapsed = time.time() - start_time
-        save_to_google_sheets([[claim, "", "", "", round(elapsed, 3),"parsing error"]])
-        return None, None
-
-'''
