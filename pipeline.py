@@ -27,7 +27,7 @@ def classify_claim(claim):
             "Return a structured JSON object with the fields: "
             "verdict (string: 'True', 'False', or 'Uncertain'), "
             "confidence (integer 0–99, never 100), "
-            "explanation (string, explaining the reasoning behind the verdict briefly)," 
+            "response (string, explaining the reasoning behind the verdict briefly)," 
             "sources (list of URLs)."
             "For 'sources', always return the grounded citations provided by the search tool "
             "(they will look like 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/...'). "
