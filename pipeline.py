@@ -33,7 +33,7 @@ def classify_claim(claim):
             "(they will look like 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/...'). "
             "Never fabricate or shorten these links, and never return raw guessed URLs."
             "Return ONLY the JSON."
-            "here is an example of a valid output: ```JSON {\"verdict\": \"True\", \"confidence\": 85, \"explanation\": \"The claim is supported by multiple reputable sources that confirm the event occurred as described.\", \"sources\": [\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/...\", \"https://vertexaisearch.cloud.google.com/grounding-api-redirect/...\"]}```"
+            "here is an example of a valid output: ```JSON {\"verdict\": \"True\", \"confidence\": 85, \"response\": \"The claim is supported by multiple reputable sources that confirm the event occurred as described.\", \"sources\": [\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/...\", \"https://vertexaisearch.cloud.google.com/grounding-api-redirect/...\"]}```"
             "again, you MUST return ONLY the JSON."
         )
 
