@@ -17,47 +17,116 @@ load_dotenv()
 from google import genai
 from google.genai import types
 # ============================Pipeline function==========================
-def classify_claim(claim):
-    start_time = time.time()  # Start timer
-        
-    client_gemini = genai.Client(api_key=google_genai_api_key) 
+Evidence_collection_prompt = (
+    "You are a meticulous fact-checker. Your task is to verify the accuracy of a given claim by searching the web for credible sources. "
+    "Use the Google Search tool to find relevant information."
+    "Ignore claims that are subjective or opinion-based, and focus only on factual claims."
+    "For non-factual claims, respond with 'Unverifiable claim'."
+)
 
-    sys_prompt = (
-            "You are a fact checker fact checking posts on X. You are to determine the claims in the post and determine if it is true, false, or uncertain. ALWAYS search the web for relevant information to support your verdict. "
-            "Return a structured JSON object with the fields: "
-            "verdict (string: 'True', 'False', or 'Uncertain'), "
-            "confidence (integer 0–99, never 100), "
-            "response (string, explaining the reasoning behind the verdict briefly)," 
-            "sources (list of URLs)."
-            "For 'sources', always return the grounded citations provided by the search tool "
-            "(they will look like 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/...'). "
-            "Never fabricate or shorten these links, and never return raw guessed URLs."
-            "Return ONLY the JSON."
-            "here is an example of a valid output: ```JSON {\"verdict\": \"True\", \"confidence\": 85, \"response\": \"The claim is supported by multiple reputable sources that confirm the event occurred as described.\", \"sources\": [\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/...\", \"https://vertexaisearch.cloud.google.com/grounding-api-redirect/...\"]}```"
-            "again, you MUST return ONLY the JSON."
-        )
-
-    grounding_tool = types.Tool(
-        google_search=types.GoogleSearch()
-    )
-
+def collect_evidence(claim):
+    client = genai.Client(api_key=google_genai_api_key)
+    tool = types.Tool(google_search=types.GoogleSearch())
     config = types.GenerateContentConfig(
-        tools=[grounding_tool],
+        tools=[tool],
         thinking_config=types.ThinkingConfig(thinking_budget=512),
-        system_instruction=sys_prompt,
+        system_instruction=Evidence_collection_prompt,
     )
-
-
-    response = client_gemini.models.generate_content(
+    return client.models.generate_content(
         model="gemini-2.5-flash-lite",
-        contents=("Is it true that: " + claim),
+        contents=f"Fact-check this claim and summarize findings:\n{claim}",
         config=config,
     )
-        
-    elapsed = time.time() - start_time  # End timer
-    # Save to Google Sheets (Raw post,Exa_searched claim,LLM response,Verdict,ElapsedTime)
-    save_to_google_sheets([[claim, response.text, round(elapsed, 3)]])
 
-    print(f"Query took {elapsed:.3f} seconds")
-    return response.text
+def add_citations(response):
+    text = response.text
+    supports = getattr(response.candidates[0].grounding_metadata, "grounding_supports", None)
+    chunks = getattr(response.candidates[0].grounding_metadata, "grounding_chunks", None)
+
+    if not supports or not chunks:
+        # No citations available, just return the text
+        return text
+
+    # Sort supports by end_index in descending order to avoid shifting issues when inserting.
+    sorted_supports = sorted(supports, key=lambda s: s.segment.end_index, reverse=True)
+
+    all_urls = set()
+    for support in sorted_supports:
+        end_index = support.segment.end_index
+        if support.grounding_chunk_indices:
+            # Create citation string like [1][2] (no links inline)
+            citation_indices = []
+            for i in support.grounding_chunk_indices:
+                if i < len(chunks):
+                    uri = chunks[i].web.uri
+                    all_urls.add(uri)
+                    citation_indices.append(f"[{i + 1}]")
+            citation_string = "".join(citation_indices)
+            text = text[:end_index] + citation_string + text[end_index:]
+
+    # Add sources list at the end
+    if all_urls:
+        text += "\n\nsources: [" + ", ".join(all_urls) + "]"
+
+    return text
+
+
+response_schema = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string"},
+        "confidence": {"type": "integer"},
+        "response": {"type": "string"},
+        "sources": {
+            "type": "array",
+            "items": {"type": "string"}
+        }
+    },
+    "required": ["verdict", "confidence", "response", "sources"]
+}
+
+sys_prompt = (
+    "You are a fact-checking output formatter. "
+    "You will be given a summary of evidence about a factual claim. "
+    "From that summary, extract and return a JSON object with these fields:\n"
+    " - verdict: one of 'True', 'False', or 'Uncertain', depending on whether the claim is supported, refuted, or unclear.\n"
+    " - confidence: integer from 0 to 99 estimating confidence in the verdict.\n"
+    " - response: 1–3 sentences summarizing the reasoning.\n"
+    " - sources: a list of relevant citation URLs found in the text.\n"
+    "Return only valid JSON, following the provided schema."
+)
+
+def structure_to_json(text):
+    client = genai.Client(api_key=google_genai_api_key)
+    config = types.GenerateContentConfig(
+        system_instruction=sys_prompt,
+        response_mime_type="application/json",
+        response_schema=response_schema,
+    )
+    response = client.models.generate_content(
+        model="gemini-2.5-flash-lite",
+        contents=text,
+        config=config,
+    )
+    # response.text will be JSON
+    return json.loads(response.text)
+
+def classify_claim(claim):
+    start_time = time.time() 
+    raw_summary = collect_evidence(claim)
+    text_with_citations = add_citations(raw_summary)
+    result_json = structure_to_json(text_with_citations)
+    elapsed = time.time() - start_time  # End timer
+
+    # Flatten result_json for Google Sheets
+    row = [
+        claim,
+        result_json.get("verdict", ""),
+        result_json.get("confidence", ""),
+        result_json.get("response", ""),
+        ", ".join(result_json.get("sources", [])),
+        elapsed
+    ]
+    save_to_google_sheets([row])
+    return result_json
 
