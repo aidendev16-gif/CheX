@@ -127,6 +127,6 @@ def classify_claim(claim):
         ", ".join(result_json.get("sources", [])),
         elapsed
     ]
-    save_to_google_sheets([row])
+    #save_to_google_sheets([row])
     return result_json
 
